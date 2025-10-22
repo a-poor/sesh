@@ -4,78 +4,88 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-`sesh` is a CLI tool for managing TMUX sessions via configuration files. It allows users to define session layouts in `.sesh-conf.toml` files and quickly restart/manage their tmux sessions with multiple windows and commands.
+`sesh` is a CLI tool for managing TMUX sessions with persistent configuration. It allows users to define sessions with multiple windows/panes in a `.seshconf.toml` file and quickly start/stop/restart those sessions.
 
-## Development Commands
+## Build and Development Commands
 
-### Build and Run
+### Building
 ```bash
-cargo build              # Build the project
-cargo build --release    # Build optimized release binary
-cargo run                # Run the project
-cargo run -- <args>      # Run with arguments
+cargo build                    # Development build
+cargo build --release          # Optimized release build
+```
+
+### Running
+```bash
+cargo run -- <command>         # Run the CLI with arguments
+cargo run -- init              # Example: initialize config
+cargo run -- --help            # View available commands
 ```
 
 ### Testing
 ```bash
-cargo test               # Run all tests
-cargo test <test_name>   # Run a specific test
-cargo test -- --nocapture  # Run tests with output visible
+cargo test                     # Run all tests
+cargo test -- --nocapture      # Run tests with stdout visible
+cargo test <test_name>         # Run specific test
 ```
 
 ### Code Quality
 ```bash
-cargo check              # Fast compilation check
-cargo clippy             # Run linter
-cargo fmt                # Format code
-cargo fmt -- --check     # Check formatting without modifying
+cargo clippy                   # Lint code
+cargo fmt                      # Format code
+cargo check                    # Fast syntax check without building
 ```
 
 ## Architecture
 
 ### Module Structure
 
-- **`main.rs`**: Entry point (currently minimal, prints "Hello, world!")
-- **`cli.rs`**: CLI argument parsing and command definitions (using clap)
-- **`app.rs`**: Core application logic for session management
-- **`conf.rs`**: Configuration file parsing and validation (`.sesh-conf.toml` files)
-- **`db.rs`**: Database layer for tracking session state (using rusqlite)
+- **main.rs**: Entry point that parses CLI args and dispatches to app handlers
+- **cli.rs**: CLI definition using clap with derive macros. Defines `Cli`, `Command`, and all argument structs
+- **app.rs**: Business logic for each command (init, status, up, down, attach, restart, window operations)
+- **conf.rs**: Config file data structures (`Config`, `WindowConf`) with TOML serialization/deserialization
+- **words.rs**: Random name generation (Docker-style adjective-noun combinations)
+- **adjectives.rs**, **nouns.rs**: Word lists for random name generation
 
 ### Configuration File Format
 
-Sessions are defined in `.sesh-conf.toml` files with the following structure:
+The tool uses `.seshconf.toml` (configurable via `--config` flag) with this structure:
 
 ```toml
 name = "session-name"
 
 [[window]]
-name = "window-name"
-command = ["command", "args"]
-depends_on = "other-window"  # Optional dependency
+name = "editor"
+command = ["vim", "."]
+
+[[window]]
+name = "server"
+command = ["npm", "run", "dev"]
 ```
 
-### Planned Commands
+The config is loaded/written using the `Config::load()` and `Config::write()` methods in conf.rs.
 
-- `sesh init` - Create a new `.sesh-conf.toml` in the current directory
-- `sesh up` - Start/ensure session is running with all windows
-- `sesh down` - Shut down the session
-- `sesh restart` - Stop and restart the session
-- `sesh status` - Check current session status
-- `sesh attach` - Ensure session is running and attach to it
+### CLI Flow
 
-### Key Dependencies
+1. `main.rs` parses CLI using clap
+2. Pattern matches on `Command` enum to dispatch to appropriate `run_*` function in `app.rs`
+3. App functions receive `&Cli` reference to access global options (config path, quiet mode)
+4. Errors propagate as `anyhow::Result` and are printed in main.rs before exiting with code 1
 
-- **clap**: CLI argument parsing (with derive feature)
-- **toml**: TOML configuration file parsing
-- **serde**: Serialization/deserialization
-- **rusqlite**: SQLite database for session state
-- **validator**: Configuration validation (with derive feature)
+### Current Implementation Status
 
-## Implementation Notes
+Only `sesh init` is currently implemented. The following commands return "Not implemented" errors:
+- status, up, down, attach, window add, window remove
 
-The project is in early development stage. The core modules are defined but mostly empty. When implementing features:
+The `restart` command is implemented as `run_down() + run_up()` but will fail until those are implemented.
 
-1. Session state should be tracked in SQLite (via `db.rs`)
-2. TMUX interaction will need shell commands for creating sessions/windows and running commands
-3. Window dependencies (e.g., `depends_on`) need to be resolved before starting windows
-4. Configuration validation should use the `validator` crate to ensure valid TOML structures
+## Adding New Commands
+
+1. Add command variant to `Command` enum in cli.rs
+2. Add argument struct if needed (like `InitArgs`)
+3. Add pattern match case in main.rs
+4. Implement `run_<command>` function in app.rs
+5. Add tests in conf.rs or create new test module
+
+## Testing Patterns
+
+Tests are defined inline using `#[cfg(test)]` modules (see conf.rs:39-90). The test in conf.rs verifies TOML deserialization matches the expected `Config` struct.

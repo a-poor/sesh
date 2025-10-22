@@ -2,7 +2,6 @@ mod adjectives;
 mod app;
 mod cli;
 mod conf;
-mod db;
 mod nouns;
 mod words;
 
