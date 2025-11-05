@@ -3,6 +3,7 @@ mod app;
 mod cli;
 mod conf;
 mod nouns;
+mod tmux;
 mod words;
 
 use clap::Parser;
@@ -18,8 +19,8 @@ fn main() {
         Command::Attach => app::run_attach(&c),
         Command::Restart => app::run_restart(&c),
         Command::Window(ref args) => match args.command {
-            WindowCommands::Add(ref _args) => app::run_window_add(&c),
-            WindowCommands::Remove(ref _args) => app::run_window_remove(&c),
+            WindowCommands::Add(ref add_args) => app::run_window_add(&c, add_args),
+            WindowCommands::Remove(ref rm_args) => app::run_window_remove(&c, rm_args),
         },
     } {
         eprintln!("Error: {}", err);
