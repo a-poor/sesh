@@ -18,7 +18,12 @@ pub trait TmuxBackend {
     fn new_session(&self, name: &str, detached: bool) -> Result<()>;
 
     /// Create a new window in an existing session.
-    fn new_window(&self, session: &str, window_name: Option<&str>, target_index: Option<usize>) -> Result<()>;
+    fn new_window(
+        &self,
+        session: &str,
+        window_name: Option<&str>,
+        target_index: Option<usize>,
+    ) -> Result<()>;
 
     /// Send keys/commands to a tmux window.
     fn send_keys(&self, session: &str, window_index: usize, command: &[String]) -> Result<()>;
@@ -38,9 +43,7 @@ pub struct RealTmuxBackend;
 
 impl TmuxBackend for RealTmuxBackend {
     fn check_available(&self) -> Result<()> {
-        let output = Command::new("tmux")
-            .arg("-V")
-            .output();
+        let output = Command::new("tmux").arg("-V").output();
 
         match output {
             Ok(_) => Ok(()),
@@ -101,7 +104,12 @@ impl TmuxBackend for RealTmuxBackend {
         Ok(())
     }
 
-    fn new_window(&self, session: &str, window_name: Option<&str>, target_index: Option<usize>) -> Result<()> {
+    fn new_window(
+        &self,
+        session: &str,
+        window_name: Option<&str>,
+        target_index: Option<usize>,
+    ) -> Result<()> {
         let mut cmd = Command::new("tmux");
         cmd.arg("new-window");
         cmd.arg("-t").arg(session);
@@ -118,7 +126,11 @@ impl TmuxBackend for RealTmuxBackend {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(anyhow!("Failed to create window in session '{}': {}", session, stderr));
+            return Err(anyhow!(
+                "Failed to create window in session '{}': {}",
+                session,
+                stderr
+            ));
         }
 
         Ok(())
@@ -215,7 +227,11 @@ pub fn new_session(name: &str, detached: bool) -> Result<()> {
 }
 
 /// Create a new window in an existing session.
-pub fn new_window(session: &str, window_name: Option<&str>, target_index: Option<usize>) -> Result<()> {
+pub fn new_window(
+    session: &str,
+    window_name: Option<&str>,
+    target_index: Option<usize>,
+) -> Result<()> {
     REAL_BACKEND.new_window(session, window_name, target_index)
 }
 
@@ -299,7 +315,8 @@ impl TmuxBackend for MockTmuxBackend {
 
     fn list_windows(&self, session: &str) -> Result<Vec<String>> {
         let state = self.state.lock().unwrap();
-        state.sessions
+        state
+            .sessions
             .get(session)
             .cloned()
             .ok_or_else(|| anyhow!("Session '{}' not found", session))
@@ -314,9 +331,15 @@ impl TmuxBackend for MockTmuxBackend {
         Ok(())
     }
 
-    fn new_window(&self, session: &str, window_name: Option<&str>, _target_index: Option<usize>) -> Result<()> {
+    fn new_window(
+        &self,
+        session: &str,
+        window_name: Option<&str>,
+        _target_index: Option<usize>,
+    ) -> Result<()> {
         let mut state = self.state.lock().unwrap();
-        let windows = state.sessions
+        let windows = state
+            .sessions
             .get_mut(session)
             .ok_or_else(|| anyhow!("Session '{}' not found", session))?;
 
@@ -330,7 +353,9 @@ impl TmuxBackend for MockTmuxBackend {
         if !state.sessions.contains_key(session) {
             return Err(anyhow!("Session '{}' not found", session));
         }
-        state.commands_sent.push((session.to_string(), window_index, command.to_vec()));
+        state
+            .commands_sent
+            .push((session.to_string(), window_index, command.to_vec()));
         Ok(())
     }
 
@@ -344,7 +369,8 @@ impl TmuxBackend for MockTmuxBackend {
 
     fn kill_window(&self, session: &str, window_name: &str) -> Result<()> {
         let mut state = self.state.lock().unwrap();
-        let windows = state.sessions
+        let windows = state
+            .sessions
             .get_mut(session)
             .ok_or_else(|| anyhow!("Session '{}' not found", session))?;
 
@@ -352,7 +378,11 @@ impl TmuxBackend for MockTmuxBackend {
             windows.remove(pos);
             Ok(())
         } else {
-            Err(anyhow!("Window '{}' not found in session '{}'", window_name, session))
+            Err(anyhow!(
+                "Window '{}' not found in session '{}'",
+                window_name,
+                session
+            ))
         }
     }
 

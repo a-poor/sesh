@@ -57,7 +57,9 @@ pub fn run_status(cli: &Cli) -> Result<()> {
         } else {
             println!("  Windows:");
             for (idx, window_conf) in config.window.iter().enumerate() {
-                let window_name = window_conf.name.as_ref()
+                let window_name = window_conf
+                    .name
+                    .as_ref()
                     .map(|s| s.as_str())
                     .unwrap_or("unnamed");
 
@@ -233,9 +235,7 @@ pub fn run_window_add(cli: &Cli, args: &WindowAddArgs) -> Result<()> {
     config.write(&cli.config)?;
 
     if !cli.quiet {
-        let name = args.name.as_ref()
-            .map(|s| s.as_str())
-            .unwrap_or("unnamed");
+        let name = args.name.as_ref().map(|s| s.as_str()).unwrap_or("unnamed");
         println!("Added window '{}' to config", name);
     }
 
@@ -249,9 +249,9 @@ pub fn run_window_remove(cli: &Cli, args: &WindowRemoveArgs) -> Result<()> {
     if let Some(name) = &args.name {
         // Find and remove window by name
         let initial_len = config.window.len();
-        config.window.retain(|w| {
-            w.name.as_ref().map(|n| n != name).unwrap_or(true)
-        });
+        config
+            .window
+            .retain(|w| w.name.as_ref().map(|n| n != name).unwrap_or(true));
 
         if config.window.len() == initial_len {
             return Err(anyhow!("Window '{}' not found in config", name));
@@ -397,8 +397,7 @@ command = ["vim", "."]
 "#;
 
         let cli = create_test_cli(&temp_dir, config_content)?;
-        let backend = MockTmuxBackend::new()
-            .with_session("test-session", vec!["editor"]);
+        let backend = MockTmuxBackend::new().with_session("test-session", vec!["editor"]);
 
         let result = run_status_with_backend(&cli, &backend);
         assert!(result.is_ok());
@@ -471,8 +470,7 @@ name = "terminal"
 "#;
 
         let cli = create_test_cli(&temp_dir, config_content)?;
-        let backend = MockTmuxBackend::new()
-            .with_session("existing-session", vec!["terminal"]);
+        let backend = MockTmuxBackend::new().with_session("existing-session", vec!["terminal"]);
 
         // Running up on existing session should succeed
         let result = run_up_with_backend(&cli, &backend);
@@ -490,8 +488,7 @@ window = []
 "#;
 
         let cli = create_test_cli(&temp_dir, config_content)?;
-        let backend = MockTmuxBackend::new()
-            .with_session("kill-me", vec![]);
+        let backend = MockTmuxBackend::new().with_session("kill-me", vec![]);
 
         run_down_with_backend(&cli, &backend)?;
 
@@ -570,7 +567,11 @@ window = []
         assert_eq!(config.window.len(), 1);
         assert_eq!(
             config.window[0].command,
-            Some(vec!["npm".to_string(), "run".to_string(), "dev".to_string()])
+            Some(vec![
+                "npm".to_string(),
+                "run".to_string(),
+                "dev".to_string()
+            ])
         );
 
         Ok(())
@@ -637,9 +638,7 @@ window = []
 
         let cli = create_test_cli(&temp_dir, config_content)?;
 
-        let args = WindowRemoveArgs {
-            name: None,
-        };
+        let args = WindowRemoveArgs { name: None };
 
         let result = run_window_remove(&cli, &args);
         assert!(result.is_err());
