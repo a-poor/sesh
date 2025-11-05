@@ -4,14 +4,20 @@ use clap::{Args, Parser, Subcommand};
 use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
-#[command(version, about)]
+#[command(
+    version,
+    about = "A CLI tool for managing TMUX sessions with persistent configuration",
+    long_about = "sesh manages TMUX sessions defined in a .seshconf.toml file, allowing you to quickly start, stop, and manage multi-window terminal environments."
+)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Command,
 
+    /// Path to the session configuration file
     #[arg(long, global = true, default_value = ".seshconf.toml")]
     pub config: PathBuf,
 
+    /// Suppress output messages
     #[arg(short, long, global = true, action)]
     pub quiet: bool,
 }
@@ -24,12 +30,25 @@ impl Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Initialize a new session configuration file
     Init(InitArgs),
+
+    /// Check the status of the session and its windows
     Status,
+
+    /// Start the TMUX session and all configured windows
     Up,
+
+    /// Stop the TMUX session
     Down,
+
+    /// Start the session and attach to it (selects default window if configured)
     Attach,
+
+    /// Restart the session (runs down then up)
     Restart,
+
+    /// Manage windows in the session configuration
     Window(WindowArgs),
 }
 
@@ -54,7 +73,10 @@ pub struct WindowArgs {
 
 #[derive(Debug, Subcommand)]
 pub enum WindowCommands {
+    /// Add a new window to the session configuration
     Add(WindowAddArgs),
+
+    /// Remove a window from the session configuration
     Remove(WindowRemoveArgs),
 }
 
@@ -75,6 +97,7 @@ pub struct WindowAddArgs {
 
 #[derive(Debug, Args)]
 pub struct WindowRemoveArgs {
+    /// Name of the window to remove
     #[arg(short, long)]
     pub name: Option<String>,
 }
