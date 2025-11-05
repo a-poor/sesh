@@ -646,4 +646,294 @@ window = []
 
         Ok(())
     }
+
+    // Integration tests using real tmux binary
+    // Run with: cargo test -- --ignored
+    //
+    // These tests require tmux to be installed and will actually
+    // create and destroy tmux sessions. They are ignored by default
+    // to avoid requiring tmux for regular test runs.
+
+    use crate::tmux::RealTmuxBackend;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn create_unique_session_name() -> String {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+        format!("sesh-test-{}", timestamp)
+    }
+
+    fn cleanup_test_session(backend: &RealTmuxBackend, session_name: &str) {
+        // Best effort cleanup - ignore errors
+        let _ = backend.kill_session(session_name);
+    }
+
+    #[test]
+    #[ignore]
+    fn test_real_tmux_status_session_not_running() -> Result<()> {
+        let backend = RealTmuxBackend;
+
+        // Check tmux is available
+        backend.check_available()?;
+
+        let session_name = create_unique_session_name();
+        let temp_dir = TempDir::new()?;
+        let config_content = format!(
+            r#"
+name = "{}"
+
+[[window]]
+name = "editor"
+command = ["vim", "."]
+"#,
+            session_name
+        );
+
+        let cli = create_test_cli(&temp_dir, &config_content)?;
+
+        // Session doesn't exist, should succeed without error
+        let result = run_status_with_backend(&cli, &backend);
+        assert!(result.is_ok());
+
+        Ok(())
+    }
+
+    #[test]
+    #[ignore]
+    fn test_real_tmux_status_session_running() -> Result<()> {
+        let backend = RealTmuxBackend;
+        backend.check_available()?;
+
+        let session_name = create_unique_session_name();
+        let temp_dir = TempDir::new()?;
+        let config_content = format!(
+            r#"
+name = "{}"
+
+[[window]]
+name = "editor"
+command = ["echo", "test"]
+"#,
+            session_name
+        );
+
+        let cli = create_test_cli(&temp_dir, &config_content)?;
+
+        // Create the session
+        backend.new_session(&session_name, true)?;
+
+        let result = run_status_with_backend(&cli, &backend);
+        assert!(result.is_ok());
+
+        // Cleanup
+        cleanup_test_session(&backend, &session_name);
+
+        Ok(())
+    }
+
+    #[test]
+    #[ignore]
+    fn test_real_tmux_up_creates_new_session() -> Result<()> {
+        let backend = RealTmuxBackend;
+        backend.check_available()?;
+
+        let session_name = create_unique_session_name();
+        let temp_dir = TempDir::new()?;
+        let config_content = format!(
+            r#"
+name = "{}"
+
+[[window]]
+name = "terminal"
+command = ["echo", "hello"]
+"#,
+            session_name
+        );
+
+        let cli = create_test_cli(&temp_dir, &config_content)?;
+
+        // Ensure session doesn't exist before test
+        let exists_before = backend.has_session(&session_name)?;
+        assert!(!exists_before, "Session should not exist before test");
+
+        // Run up
+        run_up_with_backend(&cli, &backend)?;
+
+        // Verify session was created
+        let exists_after = backend.has_session(&session_name)?;
+        assert!(exists_after, "Session should exist after run_up");
+
+        // Cleanup
+        cleanup_test_session(&backend, &session_name);
+
+        Ok(())
+    }
+
+    #[test]
+    #[ignore]
+    fn test_real_tmux_up_with_multiple_windows() -> Result<()> {
+        let backend = RealTmuxBackend;
+        backend.check_available()?;
+
+        let session_name = create_unique_session_name();
+        let temp_dir = TempDir::new()?;
+        let config_content = format!(
+            r#"
+name = "{}"
+
+[[window]]
+name = "editor"
+command = ["echo", "window1"]
+
+[[window]]
+name = "server"
+command = ["echo", "window2"]
+"#,
+            session_name
+        );
+
+        let cli = create_test_cli(&temp_dir, &config_content)?;
+
+        run_up_with_backend(&cli, &backend)?;
+
+        // Verify session exists
+        assert!(backend.has_session(&session_name)?);
+
+        // Verify windows were created
+        let windows = backend.list_windows(&session_name)?;
+        assert!(!windows.is_empty(), "Should have created windows");
+
+        // Cleanup
+        cleanup_test_session(&backend, &session_name);
+
+        Ok(())
+    }
+
+    #[test]
+    #[ignore]
+    fn test_real_tmux_up_idempotent() -> Result<()> {
+        let backend = RealTmuxBackend;
+        backend.check_available()?;
+
+        let session_name = create_unique_session_name();
+        let temp_dir = TempDir::new()?;
+        let config_content = format!(
+            r#"
+name = "{}"
+
+[[window]]
+name = "terminal"
+"#,
+            session_name
+        );
+
+        let cli = create_test_cli(&temp_dir, &config_content)?;
+
+        // Run up twice
+        run_up_with_backend(&cli, &backend)?;
+        let result = run_up_with_backend(&cli, &backend);
+
+        // Second run should also succeed
+        assert!(result.is_ok(), "Running up twice should be idempotent");
+
+        // Cleanup
+        cleanup_test_session(&backend, &session_name);
+
+        Ok(())
+    }
+
+    #[test]
+    #[ignore]
+    fn test_real_tmux_down_kills_session() -> Result<()> {
+        let backend = RealTmuxBackend;
+        backend.check_available()?;
+
+        let session_name = create_unique_session_name();
+        let temp_dir = TempDir::new()?;
+        let config_content = format!(
+            r#"
+name = "{}"
+window = []
+"#,
+            session_name
+        );
+
+        let cli = create_test_cli(&temp_dir, &config_content)?;
+
+        // Create session first
+        backend.new_session(&session_name, true)?;
+        assert!(backend.has_session(&session_name)?);
+
+        // Kill it
+        run_down_with_backend(&cli, &backend)?;
+
+        // Verify it's gone
+        let exists = backend.has_session(&session_name)?;
+        assert!(!exists, "Session should be killed");
+
+        Ok(())
+    }
+
+    #[test]
+    #[ignore]
+    fn test_real_tmux_down_nonexistent_session() -> Result<()> {
+        let backend = RealTmuxBackend;
+        backend.check_available()?;
+
+        let session_name = create_unique_session_name();
+        let temp_dir = TempDir::new()?;
+        let config_content = format!(
+            r#"
+name = "{}"
+window = []
+"#,
+            session_name
+        );
+
+        let cli = create_test_cli(&temp_dir, &config_content)?;
+
+        // Should succeed even if session doesn't exist
+        let result = run_down_with_backend(&cli, &backend);
+        assert!(result.is_ok());
+
+        Ok(())
+    }
+
+    #[test]
+    #[ignore]
+    fn test_real_tmux_full_lifecycle() -> Result<()> {
+        let backend = RealTmuxBackend;
+        backend.check_available()?;
+
+        let session_name = create_unique_session_name();
+        let temp_dir = TempDir::new()?;
+        let config_content = format!(
+            r#"
+name = "{}"
+
+[[window]]
+name = "main"
+command = ["echo", "lifecycle-test"]
+"#,
+            session_name
+        );
+
+        let cli = create_test_cli(&temp_dir, &config_content)?;
+
+        // Full lifecycle: up -> status -> down
+        assert!(!backend.has_session(&session_name)?);
+
+        run_up_with_backend(&cli, &backend)?;
+        assert!(backend.has_session(&session_name)?);
+
+        let status_result = run_status_with_backend(&cli, &backend);
+        assert!(status_result.is_ok());
+
+        run_down_with_backend(&cli, &backend)?;
+        assert!(!backend.has_session(&session_name)?);
+
+        Ok(())
+    }
 }
