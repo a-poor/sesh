@@ -56,6 +56,7 @@ name = "session-name"
 [[window]]
 name = "editor"
 command = ["vim", "."]
+default = true  # Optional: select this window when attaching
 
 [[window]]
 name = "server"
@@ -63,6 +64,11 @@ command = ["npm", "run", "dev"]
 ```
 
 The config is loaded/written using the `Config::load()` and `Config::write()` methods in conf.rs.
+
+**Window Configuration Fields:**
+- `name` (optional): Name of the window
+- `command` (optional): Command to run in the window
+- `default` (optional): Boolean flag to select this window when running `sesh attach` or `sesh up`. Only one window should have `default = true`.
 
 ### CLI Flow
 
@@ -73,10 +79,15 @@ The config is loaded/written using the `Config::load()` and `Config::write()` me
 
 ### Current Implementation Status
 
-Only `sesh init` is currently implemented. The following commands return "Not implemented" errors:
-- status, up, down, attach, window add, window remove
-
-The `restart` command is implemented as `run_down() + run_up()` but will fail until those are implemented.
+All core commands are implemented:
+- `init`: Initialize a new config file
+- `status`: Check session and window status
+- `up`: Start the session and windows
+- `down`: Stop the session
+- `attach`: Start session and attach to it (respects the `default` window flag)
+- `restart`: Restart the session (runs `down` then `up`)
+- `window add`: Add a window to the config
+- `window remove`: Remove a window from the config
 
 ## Adding New Commands
 

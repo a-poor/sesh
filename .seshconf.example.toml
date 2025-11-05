@@ -1,0 +1,19 @@
+# Example sesh configuration file
+# This shows how to use the default window flag
+
+name = "my-project"
+
+# The editor window will be selected by default when using 'sesh attach'
+[[window]]
+name = "editor"
+command = ["vim", "."]
+default = true
+
+# Other windows without the default flag
+[[window]]
+name = "server"
+command = ["npm", "run", "dev"]
+
+[[window]]
+name = "tests"
+command = ["npm", "test", "--", "--watch"]

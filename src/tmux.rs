@@ -39,6 +39,9 @@ pub trait TmuxBackend {
 
     /// Attach to a tmux session (foreground operation).
     fn attach_session(&self, name: &str) -> Result<()>;
+
+    /// Attach to a tmux session and select a specific window.
+    fn attach_session_with_window(&self, session: &str, window: &str) -> Result<()>;
 }
 
 /// Real tmux backend that executes actual tmux commands.
@@ -225,6 +228,21 @@ impl TmuxBackend for RealTmuxBackend {
 
         Ok(())
     }
+
+    fn attach_session_with_window(&self, session: &str, window: &str) -> Result<()> {
+        let target = format!("{}:{}", session, window);
+        let status = Command::new("tmux")
+            .arg("attach-session")
+            .arg("-t")
+            .arg(&target)
+            .status()?;
+
+        if !status.success() {
+            return Err(anyhow!("Failed to attach to session '{}' window '{}'", session, window));
+        }
+
+        Ok(())
+    }
 }
 
 // Convenience functions using the real backend for backward compatibility
@@ -282,6 +300,11 @@ pub fn rename_window(session: &str, window_index: usize, new_name: &str) -> Resu
 /// Attach to a tmux session (foreground operation).
 pub fn attach_session(name: &str) -> Result<()> {
     REAL_BACKEND.attach_session(name)
+}
+
+/// Attach to a tmux session and select a specific window.
+pub fn attach_session_with_window(session: &str, window: &str) -> Result<()> {
+    REAL_BACKEND.attach_session_with_window(session, window)
 }
 
 #[cfg(test)]
@@ -439,6 +462,18 @@ impl TmuxBackend for MockTmuxBackend {
         let state = self.state.lock().unwrap();
         if !state.sessions.contains_key(name) {
             return Err(anyhow!("Session '{}' not found", name));
+        }
+        Ok(())
+    }
+
+    fn attach_session_with_window(&self, session: &str, window: &str) -> Result<()> {
+        let state = self.state.lock().unwrap();
+        let windows = state.sessions
+            .get(session)
+            .ok_or_else(|| anyhow!("Session '{}' not found", session))?;
+
+        if !windows.iter().any(|w| w == window) {
+            return Err(anyhow!("Window '{}' not found in session '{}'", window, session));
         }
         Ok(())
     }

@@ -15,6 +15,8 @@ pub struct Config {
 pub struct WindowConf {
     pub name: Option<String>,
     pub command: Option<Vec<String>>,
+    #[serde(default)]
+    pub default: Option<bool>,
 }
 
 impl Config {
@@ -65,10 +67,12 @@ command = ["npm", "run", "dev", "--port", "3000"]
                 WindowConf {
                     name: Some("editor".to_string()),
                     command: Some(vec!["vim".to_string(), ".".to_string()]),
+                    default: None,
                 },
                 WindowConf {
                     name: Some("claude".to_string()),
                     command: Some(vec!["claude".to_string()]),
+                    default: None,
                 },
                 WindowConf {
                     name: Some("server".to_string()),
@@ -79,6 +83,7 @@ command = ["npm", "run", "dev", "--port", "3000"]
                         "--port".to_string(),
                         "3000".to_string(),
                     ]),
+                    default: None,
                 },
             ],
         };

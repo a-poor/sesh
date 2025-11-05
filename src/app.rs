@@ -204,11 +204,20 @@ pub fn run_attach(cli: &Cli) -> Result<()> {
     // First, ensure the session is up
     run_up(cli)?;
 
-    // Load config to get session name
+    // Load config to get session name and default window
     let config = Config::load(&cli.config)?;
 
+    // Find the default window if specified
+    let default_window = config.window.iter()
+        .find(|w| w.default == Some(true))
+        .and_then(|w| w.name.as_ref());
+
     // Attach to the session (this will block until user detaches)
-    tmux::attach_session(&config.name)?;
+    if let Some(window_name) = default_window {
+        tmux::attach_session_with_window(&config.name, window_name)?;
+    } else {
+        tmux::attach_session(&config.name)?;
+    }
 
     Ok(())
 }
@@ -234,6 +243,7 @@ pub fn run_window_add(cli: &Cli, args: &WindowAddArgs) -> Result<()> {
     let window_conf = WindowConf {
         name: args.name.clone(),
         command: Some(command),
+        default: None,
     };
 
     // Add to config
