@@ -269,3 +269,378 @@ pub fn run_window_remove(cli: &Cli, args: &WindowRemoveArgs) -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tmux::{MockTmuxBackend, TmuxBackend};
+    use std::path::PathBuf;
+    use tempfile::TempDir;
+
+    // Helper functions for testing that accept a backend parameter
+
+    fn run_status_with_backend<T: TmuxBackend>(cli: &Cli, backend: &T) -> Result<()> {
+        backend.check_available()?;
+
+        let config = Config::load(&cli.config)?;
+        let session_exists = backend.has_session(&config.name)?;
+
+        if !session_exists {
+            return Ok(());
+        }
+
+        let _running_windows = backend.list_windows(&config.name)?;
+        Ok(())
+    }
+
+    fn run_up_with_backend<T: TmuxBackend>(cli: &Cli, backend: &T) -> Result<()> {
+        backend.check_available()?;
+
+        let config = Config::load(&cli.config)?;
+        let session_exists = backend.has_session(&config.name)?;
+
+        if !session_exists {
+            backend.new_session(&config.name, true)?;
+        }
+
+        let existing_windows = if session_exists {
+            backend.list_windows(&config.name)?
+        } else {
+            vec![]
+        };
+
+        for (idx, window_conf) in config.window.iter().enumerate() {
+            let window_name = window_conf.name.as_deref();
+
+            let window_exists = if let Some(name) = window_name {
+                existing_windows.iter().any(|w| w == name)
+            } else {
+                false
+            };
+
+            if window_exists {
+                continue;
+            }
+
+            if idx == 0 && !session_exists {
+                if let Some(command) = &window_conf.command {
+                    backend.send_keys(&config.name, idx, command)?;
+                }
+            } else {
+                backend.new_window(&config.name, window_name, Some(idx))?;
+
+                if let Some(command) = &window_conf.command {
+                    backend.send_keys(&config.name, idx, command)?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn run_down_with_backend<T: TmuxBackend>(cli: &Cli, backend: &T) -> Result<()> {
+        backend.check_available()?;
+
+        let config = Config::load(&cli.config)?;
+        let session_exists = backend.has_session(&config.name)?;
+
+        if !session_exists {
+            return Ok(());
+        }
+
+        backend.kill_session(&config.name)?;
+        Ok(())
+    }
+
+    // Helper to create a test CLI with temp config
+    fn create_test_cli(temp_dir: &TempDir, config_content: &str) -> Result<Cli> {
+        let config_path = temp_dir.path().join(".seshconf.toml");
+        std::fs::write(&config_path, config_content)?;
+
+        Ok(Cli {
+            command: crate::cli::Command::Status,
+            config: config_path,
+            quiet: true,
+        })
+    }
+
+    #[test]
+    fn test_status_session_not_running() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let config_content = r#"
+name = "test-session"
+
+[[window]]
+name = "editor"
+command = ["vim", "."]
+"#;
+
+        let cli = create_test_cli(&temp_dir, config_content)?;
+        let backend = MockTmuxBackend::new();
+
+        // Session doesn't exist, should succeed without error
+        let result = run_status_with_backend(&cli, &backend);
+        assert!(result.is_ok());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_status_session_running() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let config_content = r#"
+name = "test-session"
+
+[[window]]
+name = "editor"
+command = ["vim", "."]
+"#;
+
+        let cli = create_test_cli(&temp_dir, config_content)?;
+        let backend = MockTmuxBackend::new()
+            .with_session("test-session", vec!["editor"]);
+
+        let result = run_status_with_backend(&cli, &backend);
+        assert!(result.is_ok());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_up_creates_new_session() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let config_content = r#"
+name = "new-session"
+
+[[window]]
+name = "terminal"
+command = ["bash"]
+"#;
+
+        let cli = create_test_cli(&temp_dir, config_content)?;
+        let backend = MockTmuxBackend::new();
+
+        run_up_with_backend(&cli, &backend)?;
+
+        let sessions = backend.get_sessions();
+        assert!(sessions.contains_key("new-session"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_up_with_multiple_windows() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let config_content = r#"
+name = "multi-window"
+
+[[window]]
+name = "editor"
+command = ["vim"]
+
+[[window]]
+name = "server"
+command = ["npm", "run", "dev"]
+"#;
+
+        let cli = create_test_cli(&temp_dir, config_content)?;
+        let backend = MockTmuxBackend::new();
+
+        run_up_with_backend(&cli, &backend)?;
+
+        let sessions = backend.get_sessions();
+        assert!(sessions.contains_key("multi-window"));
+
+        let windows = &sessions["multi-window"];
+        assert!(windows.contains(&"server".to_string()));
+
+        let commands = backend.get_commands_sent();
+        assert!(!commands.is_empty());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_up_idempotent() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let config_content = r#"
+name = "existing-session"
+
+[[window]]
+name = "terminal"
+"#;
+
+        let cli = create_test_cli(&temp_dir, config_content)?;
+        let backend = MockTmuxBackend::new()
+            .with_session("existing-session", vec!["terminal"]);
+
+        // Running up on existing session should succeed
+        let result = run_up_with_backend(&cli, &backend);
+        assert!(result.is_ok());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_down_kills_session() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let config_content = r#"
+name = "kill-me"
+"#;
+
+        let cli = create_test_cli(&temp_dir, config_content)?;
+        let backend = MockTmuxBackend::new()
+            .with_session("kill-me", vec![]);
+
+        run_down_with_backend(&cli, &backend)?;
+
+        let sessions = backend.get_sessions();
+        assert!(!sessions.contains_key("kill-me"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_down_nonexistent_session() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let config_content = r#"
+name = "nonexistent"
+"#;
+
+        let cli = create_test_cli(&temp_dir, config_content)?;
+        let backend = MockTmuxBackend::new();
+
+        // Should succeed even if session doesn't exist
+        let result = run_down_with_backend(&cli, &backend);
+        assert!(result.is_ok());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_window_add() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let config_content = r#"
+name = "test-session"
+
+[[window]]
+name = "existing"
+"#;
+
+        let cli = create_test_cli(&temp_dir, config_content)?;
+
+        let args = WindowAddArgs {
+            name: Some("newwin".to_string()),
+            cmd: "htop".to_string(),
+            args: vec![],
+        };
+
+        run_window_add(&cli, &args)?;
+
+        // Verify the config was updated
+        let config = Config::load(&cli.config)?;
+        assert_eq!(config.window.len(), 2);
+        assert_eq!(config.window[1].name, Some("newwin".to_string()));
+        assert_eq!(config.window[1].command, Some(vec!["htop".to_string()]));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_window_add_with_args() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let config_content = r#"
+name = "test-session"
+"#;
+
+        let cli = create_test_cli(&temp_dir, config_content)?;
+
+        let args = WindowAddArgs {
+            name: Some("server".to_string()),
+            cmd: "npm".to_string(),
+            args: vec!["run".to_string(), "dev".to_string()],
+        };
+
+        run_window_add(&cli, &args)?;
+
+        let config = Config::load(&cli.config)?;
+        assert_eq!(config.window.len(), 1);
+        assert_eq!(
+            config.window[0].command,
+            Some(vec!["npm".to_string(), "run".to_string(), "dev".to_string()])
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_window_remove() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let config_content = r#"
+name = "test-session"
+
+[[window]]
+name = "keep-me"
+
+[[window]]
+name = "remove-me"
+"#;
+
+        let cli = create_test_cli(&temp_dir, config_content)?;
+
+        let args = WindowRemoveArgs {
+            name: Some("remove-me".to_string()),
+        };
+
+        run_window_remove(&cli, &args)?;
+
+        let config = Config::load(&cli.config)?;
+        assert_eq!(config.window.len(), 1);
+        assert_eq!(config.window[0].name, Some("keep-me".to_string()));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_window_remove_nonexistent() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let config_content = r#"
+name = "test-session"
+
+[[window]]
+name = "only-window"
+"#;
+
+        let cli = create_test_cli(&temp_dir, config_content)?;
+
+        let args = WindowRemoveArgs {
+            name: Some("nonexistent".to_string()),
+        };
+
+        let result = run_window_remove(&cli, &args);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("not found"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_window_remove_requires_name() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let config_content = r#"
+name = "test-session"
+"#;
+
+        let cli = create_test_cli(&temp_dir, config_content)?;
+
+        let args = WindowRemoveArgs {
+            name: None,
+        };
+
+        let result = run_window_remove(&cli, &args);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Must specify"));
+
+        Ok(())
+    }
+}
