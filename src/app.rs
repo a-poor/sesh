@@ -123,7 +123,15 @@ pub fn run_up(cli: &Cli) -> Result<()> {
         // For the first window, we need to handle it differently
         if idx == 0 && !session_exists {
             // The session was just created with a default window at index 0
-            // We can rename it if needed, but for now we'll just send keys
+            // Rename it to match our config
+            if let Some(name) = window_name {
+                tmux::rename_window(&config.name, idx, name)?;
+                if !cli.quiet {
+                    println!("  Renamed window 0 to '{}'", name);
+                }
+            }
+
+            // Execute command if specified
             if let Some(command) = &window_conf.command {
                 tmux::send_keys(&config.name, idx, command)?;
 
@@ -322,6 +330,12 @@ mod tests {
             }
 
             if idx == 0 && !session_exists {
+                // Rename the default window 0 to match our config
+                if let Some(name) = window_name {
+                    backend.rename_window(&config.name, idx, name)?;
+                }
+
+                // Execute command if specified
                 if let Some(command) = &window_conf.command {
                     backend.send_keys(&config.name, idx, command)?;
                 }

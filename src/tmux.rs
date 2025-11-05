@@ -34,6 +34,9 @@ pub trait TmuxBackend {
     /// Kill a specific window in a session.
     fn kill_window(&self, session: &str, window_name: &str) -> Result<()>;
 
+    /// Rename a window in a session.
+    fn rename_window(&self, session: &str, window_index: usize, new_name: &str) -> Result<()>;
+
     /// Attach to a tmux session (foreground operation).
     fn attach_session(&self, name: &str) -> Result<()>;
 }
@@ -191,6 +194,24 @@ impl TmuxBackend for RealTmuxBackend {
         Ok(())
     }
 
+    fn rename_window(&self, session: &str, window_index: usize, new_name: &str) -> Result<()> {
+        let target = format!("{}:{}", session, window_index);
+
+        let output = Command::new("tmux")
+            .arg("rename-window")
+            .arg("-t")
+            .arg(&target)
+            .arg(new_name)
+            .output()?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(anyhow!("Failed to rename window '{}': {}", target, stderr));
+        }
+
+        Ok(())
+    }
+
     fn attach_session(&self, name: &str) -> Result<()> {
         let status = Command::new("tmux")
             .arg("attach-session")
@@ -251,6 +272,11 @@ pub fn kill_session(name: &str) -> Result<()> {
 /// Kill a specific window in a session.
 pub fn kill_window(session: &str, window_name: &str) -> Result<()> {
     REAL_BACKEND.kill_window(session, window_name)
+}
+
+/// Rename a window in a session.
+pub fn rename_window(session: &str, window_index: usize, new_name: &str) -> Result<()> {
+    REAL_BACKEND.rename_window(session, window_index, new_name)
 }
 
 /// Attach to a tmux session (foreground operation).
@@ -330,7 +356,8 @@ impl TmuxBackend for MockTmuxBackend {
         if state.sessions.contains_key(name) {
             return Err(anyhow!("Session '{}' already exists", name));
         }
-        state.sessions.insert(name.to_string(), vec![]);
+        // Create session with default window at index 0 (matches real tmux behavior)
+        state.sessions.insert(name.to_string(), vec!["bash".to_string()]);
         Ok(())
     }
 
@@ -387,6 +414,25 @@ impl TmuxBackend for MockTmuxBackend {
                 session
             ))
         }
+    }
+
+    fn rename_window(&self, session: &str, window_index: usize, new_name: &str) -> Result<()> {
+        let mut state = self.state.lock().unwrap();
+        let windows = state
+            .sessions
+            .get_mut(session)
+            .ok_or_else(|| anyhow!("Session '{}' not found", session))?;
+
+        if window_index >= windows.len() {
+            return Err(anyhow!(
+                "Window index {} out of range in session '{}'",
+                window_index,
+                session
+            ));
+        }
+
+        windows[window_index] = new_name.to_string();
+        Ok(())
     }
 
     fn attach_session(&self, name: &str) -> Result<()> {
