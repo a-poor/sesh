@@ -274,7 +274,6 @@ pub fn run_window_remove(cli: &Cli, args: &WindowRemoveArgs) -> Result<()> {
 mod tests {
     use super::*;
     use crate::tmux::{MockTmuxBackend, TmuxBackend};
-    use std::path::PathBuf;
     use tempfile::TempDir;
 
     // Helper functions for testing that accept a backend parameter
@@ -664,7 +663,7 @@ window = []
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_millis();
-        let random: u32 = rand::thread_rng().gen();
+        let random: u32 = rand::rng().random();
         format!("sesh-test-{}-{}", timestamp, random)
     }
 
