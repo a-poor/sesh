@@ -135,7 +135,8 @@ pub fn run_up(cli: &Cli) -> Result<()> {
             tmux::new_window(&config.name, window_name, Some(idx))?;
 
             if !cli.quiet {
-                let name = window_name.unwrap_or(&format!("window {}", idx));
+                let default_name = format!("window {}", idx);
+                let name = window_name.unwrap_or(&default_name);
                 println!("  Created window '{}'", name);
             }
 
@@ -144,7 +145,8 @@ pub fn run_up(cli: &Cli) -> Result<()> {
                 tmux::send_keys(&config.name, idx, command)?;
 
                 if !cli.quiet {
-                    let name = window_name.unwrap_or(&format!("window {}", idx));
+                    let default_name = format!("window {}", idx);
+                    let name = window_name.unwrap_or(&default_name);
                     println!("  Executed command in {}", name);
                 }
             }

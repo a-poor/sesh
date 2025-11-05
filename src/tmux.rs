@@ -1,7 +1,7 @@
 //! TMUX utility functions for managing sessions and windows.
 
 use anyhow::{Result, anyhow};
-use std::process::{Command, Output};
+use std::process::Command;
 
 /// Check if tmux is installed and available.
 pub fn check_tmux_available() -> Result<()> {
