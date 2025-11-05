@@ -112,11 +112,14 @@ impl TmuxBackend for RealTmuxBackend {
     ) -> Result<()> {
         let mut cmd = Command::new("tmux");
         cmd.arg("new-window");
-        cmd.arg("-t").arg(session);
 
-        if let Some(idx) = target_index {
-            cmd.arg("-t").arg(format!("{}:{}", session, idx));
-        }
+        // Build the target based on whether we have an index
+        let target = if let Some(idx) = target_index {
+            format!("{}:{}", session, idx)
+        } else {
+            session.to_string()
+        };
+        cmd.arg("-t").arg(target);
 
         if let Some(name) = window_name {
             cmd.arg("-n").arg(name);

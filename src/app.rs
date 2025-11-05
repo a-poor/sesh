@@ -133,8 +133,8 @@ pub fn run_up(cli: &Cli) -> Result<()> {
                 }
             }
         } else {
-            // Create new window
-            tmux::new_window(&config.name, window_name, Some(idx))?;
+            // Create new window - let tmux auto-assign the index
+            tmux::new_window(&config.name, window_name, None)?;
 
             if !cli.quiet {
                 let default_name = format!("window {}", idx);
@@ -327,7 +327,8 @@ mod tests {
                     backend.send_keys(&config.name, idx, command)?;
                 }
             } else {
-                backend.new_window(&config.name, window_name, Some(idx))?;
+                // Don't specify target_index - let tmux auto-assign indices
+                backend.new_window(&config.name, window_name, None)?;
 
                 if let Some(command) = &window_conf.command {
                     backend.send_keys(&config.name, idx, command)?;
@@ -655,6 +656,7 @@ window = []
     // to avoid requiring tmux for regular test runs.
 
     use crate::tmux::RealTmuxBackend;
+    use rand::Rng;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn create_unique_session_name() -> String {
@@ -662,7 +664,8 @@ window = []
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_millis();
-        format!("sesh-test-{}", timestamp)
+        let random: u32 = rand::thread_rng().gen();
+        format!("sesh-test-{}-{}", timestamp, random)
     }
 
     fn cleanup_test_session(backend: &RealTmuxBackend, session_name: &str) {
