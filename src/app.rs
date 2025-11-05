@@ -486,6 +486,7 @@ name = "terminal"
         let temp_dir = TempDir::new()?;
         let config_content = r#"
 name = "kill-me"
+window = []
 "#;
 
         let cli = create_test_cli(&temp_dir, config_content)?;
@@ -505,6 +506,7 @@ name = "kill-me"
         let temp_dir = TempDir::new()?;
         let config_content = r#"
 name = "nonexistent"
+window = []
 "#;
 
         let cli = create_test_cli(&temp_dir, config_content)?;
@@ -551,6 +553,7 @@ name = "existing"
         let temp_dir = TempDir::new()?;
         let config_content = r#"
 name = "test-session"
+window = []
 "#;
 
         let cli = create_test_cli(&temp_dir, config_content)?;
@@ -629,6 +632,7 @@ name = "only-window"
         let temp_dir = TempDir::new()?;
         let config_content = r#"
 name = "test-session"
+window = []
 "#;
 
         let cli = create_test_cli(&temp_dir, config_content)?;
